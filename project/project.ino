@@ -6,7 +6,7 @@
 
 /* values for display printing */
 float last_update = 0.0f;
-const float cool_down = 200.0f;    // update time of display
+const float cool_down = 200.0f;   // update time of display
 
 /* speed & deltatime */
 float speed = 0.0f;
@@ -23,6 +23,8 @@ int last_pot = 0;
 LiquidCrystal_I2C lcd(0x27, 16, 2); // setup I2C for display
 
 void setup() {
+  Serial.begin(9600);
+
   lcd.init();
   lcd.backlight();
   
@@ -40,7 +42,7 @@ void loop() {
   read_values();
   calc_deltatime(); 
   calc_speed();
-  print_display();
+  update();
   
 }
 
