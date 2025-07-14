@@ -115,11 +115,12 @@ func Draw_background(screen *ebiten.Image, g *Game) {
 }
 func (g *Game) Draw(screen *ebiten.Image) {
 
+	Draw_background(screen, g)
+
 	opts := &ebiten.DrawImageOptions{}
 	opts.GeoM.Translate(g.init_pos.x, g.init_pos.y)
 	opts.GeoM.Scale(0.2, 0.2)
 
-	Draw_background(screen, g)
 	screen.DrawImage(sprite_car, opts)
 
 }
