@@ -8,7 +8,7 @@
 #define MAX_SPEED 1000
 
 typedef struct change_t {
-  float factor = 0.0f;
+  int factor = 0;
   char dir = 'N';
 } change_t;
 

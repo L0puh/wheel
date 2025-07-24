@@ -1,9 +1,15 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"image/color"
 	_ "image/png"
+	"log"
 	"math"
+	"strconv"
+	"strings"
+
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -12,16 +18,26 @@ import (
 
 var sprite_car = load_image("./assets/car.png")
 var sprite_bg = load_image("./assets/bg.png")
+var Terminated = errors.New("terminated")
 
 type Game struct {
-	car_pos  Vector
-	init_pos Vector
-	speed    float64
+	car_pos   Vector
+	init_pos  Vector
+	speed     float64
+	last_time time.Time
+	serial    Serial
+	cooldown  time.Duration
 }
 type Vector struct {
 	x   float64
 	y   float64
 	rot float64
+}
+
+type Info struct {
+	dir    string
+	speed  float64
+	factor int
 }
 
 func load_image(name string) *ebiten.Image {
@@ -33,43 +49,65 @@ func load_image(name string) *ebiten.Image {
 	return img
 }
 
+func process_info(i string) Info {
+	if i == "" {
+		return Info{dir: ""}
+	}
+	var out Info
+	var err error
+	params := strings.Split(i, " ")
+
+	out.dir = strings.TrimPrefix(params[0], "D:")
+	out.speed, err = strconv.ParseFloat(strings.TrimPrefix(params[1], "S:"), 64)
+	if err != nil {
+		log.Print("error in parsing data from serial:", i+": ", err)
+		return Info{dir: ""}
+	}
+	out.factor, err = strconv.Atoi(strings.TrimPrefix(params[2], "F:"))
+	if err != nil {
+		log.Print("error in parsing data from serial:", i+": ", err)
+		return Info{dir: ""}
+	}
+	return out
+}
+
+func (g *Game) update_movement(dir string) error {
+	if dir == "L" {
+		g.car_pos.x -= g.speed
+	} else if dir == "R" {
+		g.car_pos.x += g.speed
+	}
+
+	g.car_pos.y -= g.speed
+
+	return nil
+
+}
+
 func (g *Game) Update() error {
-	g.speed = float64(400 / ebiten.TPS())
-	//TODO: change it to values from arduino
-	g.car_pos.rot = float64(time.Now().Second())
 
-	var delta Vector
-	if ebiten.IsKeyPressed(ebiten.KeyS) {
-		delta.y = g.speed
+	var info Info
+	if time.Now().Sub(g.last_time) > g.cooldown {
+		g.last_time = time.Now()
+		info = process_info(receive_from_serial(g.serial))
+		log.Print("RECIEVED!")
 	}
 
-	if ebiten.IsKeyPressed(ebiten.KeyW) {
-		delta.y = -g.speed
+	if ebiten.IsKeyPressed(ebiten.KeyQ) {
+		return Terminated
 	}
+	g.update_movement(info.dir)
 
-	if ebiten.IsKeyPressed(ebiten.KeyD) {
-		delta.x = g.speed
+	if info.dir != "" {
+		g.speed = info.speed
 	}
-
-	if ebiten.IsKeyPressed(ebiten.KeyA) {
-		delta.x = -g.speed
-	}
-
-	if delta.x != 0 && delta.y != 0 {
-		factor := g.speed / math.Sqrt(delta.x*delta.x+delta.y*delta.y)
-		delta.x *= factor
-		delta.y *= factor
-	}
-
-	g.car_pos.x += delta.x
-	g.car_pos.y += delta.y
 
 	return nil
 }
 
 func Draw_background(screen *ebiten.Image, g *Game) {
 
-	/* prallax bg window to make in infinte */
+	/* prallax bg window to make it infinte */
 
 	if sprite_bg == nil {
 		screen.Fill(color.RGBA{0x80, 0xa0, 0xc0, 0xff})
@@ -80,7 +118,7 @@ func Draw_background(screen *ebiten.Image, g *Game) {
 	bg_height := float64(sprite_bg.Bounds().Dy())
 	screen_width, screen_height := float64(screen.Bounds().Dx()), float64(screen.Bounds().Dy())
 
-	parallax_factor := g.speed
+	parallax_factor := 0.5
 
 	scroll_x := -g.car_pos.x * parallax_factor
 	scroll_y := -g.car_pos.y * parallax_factor
@@ -117,6 +155,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	Draw_background(screen, g)
 
+	str := fmt.Sprintf("CONNECTED TO SERIAL: %s(%d)\nSPEED: %f\n", g.serial.port, g.serial.rate, g.speed)
+	ebitenutil.DebugPrint(screen, str)
+
 	opts := &ebiten.DrawImageOptions{}
 	opts.GeoM.Translate(g.init_pos.x, g.init_pos.y)
 	opts.GeoM.Scale(0.2, 0.2)
@@ -130,15 +171,24 @@ func (g *Game) Layout(width, height int) (x, y int) {
 }
 
 func main() {
+
 	g := &Game{
-		car_pos:  Vector{x: 1800, y: 4000, rot: 0},
-		init_pos: Vector{x: 1800, y: 3000, rot: 0},
-		speed:    10.0,
+		car_pos:   Vector{x: 1800, y: 4000, rot: 0},
+		init_pos:  Vector{x: 1800, y: 3000, rot: 0},
+		speed:     0.0,
+		serial:    open_serial(),
+		cooldown:  time.Duration(10) * time.Millisecond,
+		last_time: time.Now(),
 	}
 
+	defer g.serial.socket.Close()
 	ebiten.SetWindowSize(1000, 1000)
 	err := ebiten.RunGame(g)
+
 	if err != nil {
+		if err == Terminated {
+			return
+		}
 		panic(err)
 	}
 }

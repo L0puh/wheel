@@ -8,9 +8,9 @@ void calc_deltatime() {
 void calc_speed() {
   float last_speed = speed; 
   if (gas_state && !break_state && speed < MAX_SPEED) { 
-    speed += 0.1f * deltatime;
+    speed += 0.01 * deltatime;
   } else if (break_state && speed > 0) {
-    speed -= 0.1f * deltatime;
+    speed -= 0.01 * deltatime;
   }
 
   if (deltatime != 0.0f)
@@ -21,11 +21,10 @@ void read_values(){
   pot_value = analogRead(POT_PIN);
   gas_state   = digitalRead(GAS_PIN);
   break_state = digitalRead(BRAKE_PIN);
-
 }
 
 
-void send_values(float speed, char dir, float factor) {
+void send_values(float speed, char dir, int factor) {
 
   /* 
    send data to utils's serial
@@ -83,6 +82,6 @@ void update() {
     last_update = current_time;
 
   }
-  send_values(speed, change.dir, change.factor);
+   send_values(speed, change.dir, change.factor);
 }
 
